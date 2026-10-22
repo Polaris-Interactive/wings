@@ -85,36 +85,54 @@ func getServerListDirectory(c *gin.Context) {
 	}
 }
 
-// searchFilesTimeout is the longest a search of file contents can run for. The
-// files found by then are returned and the results marked as truncated.
-const searchFilesTimeout = 60 * time.Second
+const (
+	// searchFilesDefaultTimeout is how long a search of files runs for when the
+	// request does not say, and searchFilesMaxTimeout the longest it may ask
+	// for. The files found by then are returned and the results marked as
+	// truncated.
+	searchFilesDefaultTimeout = 60 * time.Second
+	searchFilesMaxTimeout     = 10 * time.Minute
+)
 
-// postServerSearchFiles searches the contents of every file beneath a directory
-// for a string or regular expression, and returns the files that match.
+// postServerSearchFiles searches every file beneath a directory by name, by
+// content (a string or regular expression), or both, and returns the files
+// that match.
 func postServerSearchFiles(c *gin.Context) {
 	s := ExtractServer(c)
 
 	var data struct {
-		Root              string `json:"root"`
-		Query             string `json:"query"`
-		Regex             bool   `json:"regex"`
-		CaseSensitive     bool   `json:"case_sensitive"`
-		MaxResults        int    `json:"max_results"`
-		MaxMatchesPerFile int    `json:"max_matches_per_file"`
-		MaxFileSize       int64  `json:"max_file_size"`
+		Root              string   `json:"root"`
+		Query             string   `json:"query"`
+		Regex             bool     `json:"regex"`
+		Pattern           string   `json:"pattern"`
+		CaseSensitive     bool     `json:"case_sensitive"`
+		IncludeHidden     bool     `json:"include_hidden"`
+		Exclude           []string `json:"exclude"`
+		MaxResults        int      `json:"max_results"`
+		MaxMatchesPerFile int      `json:"max_matches_per_file"`
+		MaxFileSize       int64    `json:"max_file_size"`
+		// Timeout is in seconds.
+		Timeout int `json:"timeout"`
 	}
 	if err := c.BindJSON(&data); err != nil {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), searchFilesTimeout)
+	timeout := searchFilesDefaultTimeout
+	if data.Timeout > 0 {
+		timeout = min(time.Duration(data.Timeout)*time.Second, searchFilesMaxTimeout)
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
 	defer cancel()
 
 	res, err := s.Filesystem().Search(ctx, filesystem.SearchOptions{
 		Root:              data.Root,
-		Pattern:           data.Query,
+		Query:             data.Query,
 		Regex:             data.Regex,
+		Name:              data.Pattern,
 		CaseSensitive:     data.CaseSensitive,
+		IncludeHidden:     data.IncludeHidden,
+		Exclude:           data.Exclude,
 		MaxResults:        data.MaxResults,
 		MaxMatchesPerFile: data.MaxMatchesPerFile,
 		MaxFileSize:       data.MaxFileSize,
