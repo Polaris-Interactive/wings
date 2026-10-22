@@ -27,9 +27,9 @@ pipeline {
     environment {
         SRC_PATH = 'github.com/pterodactyl/wings'
 
-        DOCKER_REGISTRY = 'registry.example.com'
-        DOCKER_IMAGE = 'registry.example.com/polaris/wings'
-        DOCKER_CREDENTIALS = 'docker-registry'
+        DOCKER_REGISTRY = 'docker.astralrealms.fr'
+        DOCKER_IMAGE = 'wings'
+        DOCKER_CREDENTIALS = credentials('docker-registry')
     }
 
     stages {
