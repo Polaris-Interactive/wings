@@ -133,6 +133,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
 		{
 			files.GET("/contents", getServerFileContents)
 			files.GET("/list-directory", getServerListDirectory)
+			files.POST("/search", postServerSearchFiles)
 			files.PUT("/rename", putServerRenameFiles)
 			files.POST("/copy", postServerCopyFile)
 			files.POST("/write", postServerWriteFile)

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"emperror.dev/errors"
 	"github.com/apex/log"
@@ -82,6 +83,52 @@ func getServerListDirectory(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusOK, stats)
 	}
+}
+
+// searchFilesTimeout is the longest a search of file contents can run for. The
+// files found by then are returned and the results marked as truncated.
+const searchFilesTimeout = 60 * time.Second
+
+// postServerSearchFiles searches the contents of every file beneath a directory
+// for a string or regular expression, and returns the files that match.
+func postServerSearchFiles(c *gin.Context) {
+	s := ExtractServer(c)
+
+	var data struct {
+		Root              string `json:"root"`
+		Query             string `json:"query"`
+		Regex             bool   `json:"regex"`
+		CaseSensitive     bool   `json:"case_sensitive"`
+		MaxResults        int    `json:"max_results"`
+		MaxMatchesPerFile int    `json:"max_matches_per_file"`
+		MaxFileSize       int64  `json:"max_file_size"`
+	}
+	if err := c.BindJSON(&data); err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), searchFilesTimeout)
+	defer cancel()
+
+	res, err := s.Filesystem().Search(ctx, filesystem.SearchOptions{
+		Root:              data.Root,
+		Pattern:           data.Query,
+		Regex:             data.Regex,
+		CaseSensitive:     data.CaseSensitive,
+		MaxResults:        data.MaxResults,
+		MaxMatchesPerFile: data.MaxMatchesPerFile,
+		MaxFileSize:       data.MaxFileSize,
+	})
+	if err != nil {
+		var perr *filesystem.SearchPatternError
+		if errors.As(err, &perr) {
+			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": perr.Error()})
+			return
+		}
+		middleware.CaptureAndAbort(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, res)
 }
 
 type renameFile struct {
